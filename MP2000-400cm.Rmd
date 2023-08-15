@@ -1,0 +1,398 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+```{r}
+getwd()
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+```{r}
+#analyse du jeu de données MP graminées
+#en R cette fois
+
+install.packages("dplyr")
+library(rlang)
+library(dplyr)
+
+#installation des librairies
+install.packages("readxl")
+install.packages("ggplot2")
+install.packages("caret")
+install.packages("MASS") 
+install.packages("reshape2") 
+install.packages("reshape") 
+install.packages("signal") 
+
+#Load required libraries
+library(ggplot2)
+library(readxl)
+library(caret)
+library(signal)
+library(pls)
+
+# Create an empty data frame
+df <- data.frame()
+
+# Read the Excel data
+data <- read_excel('MPall2000600cm.xlsx')
+
+# Display the first 50 rows of data
+head(data, 50)
+```
+
+
+```{r}
+#49 échantillons... c'st tout ce que j'ai pu retrouver.
+#et encore : il y a 10 lignines dedans. Vu qu'on se concentre sur les MP, ça réduit le br d'échantillons à 38...
+#on ne peut pas faire une prédiction dans les règles avec si peu. Je ne sais pas si je pourrai même obtenir des performances satisfaisantes ave si peu.
+
+#Ouliers attendus : 9F, FF1, FF3  (6, 7, 8)
+
+```
+```{r}
+# Analyze variable types
+variable_types <- table(sapply(data, class))
+
+# Plot pie chart for variable types
+pie(variable_types, labels = names(variable_types), main = "Variable Types")
+```
+
+```{r}
+# Get the counts of variable types
+variable_counts <- table(sapply(data, class))
+
+# Print the counts of variable types
+print(variable_counts)
+```
+```{r}
+library(reshape2)
+```
+
+
+```{r}
+# Drop rows with indices 6, 7, and 8
+data <- data[-c(6, 7, 8), ]
+
+# Display the first 40 rows of data
+head(data, 40)
+```
+
+```{r}
+# Drop row index 6
+data <- data[-6, ]
+
+# Select columns for X
+X <- data[, 12:ncol(data)]
+
+# Select columns for Y in PLS1
+Y_pcoum <- data[, 10]
+Y_SG <- data[, 7]
+Y_syr <- data[, 8]
+Y_gua <- data[, 9]
+Y_oses <- data[, 2]
+Y_LK <- data[, 6]
+
+# Select columns for Y in PLS2
+Y <- data[, c(2, 6, 7, 10)]
+
+```
+
+
+```{r}
+# Display the first 50 rows of X dataset
+head(X, 50)
+```
+
+
+```{r}
+# Display the first few rows of Y_pcoum column
+head(Y, 50)
+```
+
+
+
+
+
+```{r}
+# Create a heatmap to visualize missing values
+install.packages("ggplot2")
+library(ggplot2)
+
+missing_values <- is.na(data)
+missing_values_melted <- melt(missing_values)
+
+ggplot(data = missing_values_melted, aes(x = Var2, y = Var1, fill = value)) +
+  geom_tile() +
+  scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "white")) +labs(title = "Missing Values Heatmap")
+```
+
+
+```{r}
+# Drop rows with indices 6, 7, and 8
+#data <- data[-c(6, 7, 8), ]
+
+# Display the first 40 rows of data
+head(data, 40)
+```
+
+
+```{r}
+# Drop row index 6
+#data <- data[-6, ]
+
+# Select columns for X
+X <- data[, 12:ncol(data)]
+
+# Select columns for Y in PLS1
+Y_pcoum <- data[, 10]
+Y_SG <- data[, 7]
+Y_syr <- data[, 8]
+Y_gua <- data[, 9]
+Y_oses <- data[, 2]
+Y_LK <- data[, 6]
+
+# Select columns for Y in PLS2
+Y <- data[, c(2, 6, 7, 10)]
+```
+
+
+```{r}
+# Display the first 50 rows of X dataset
+head(X, 50)
+```
+
+
+```{r}
+# Display the first few rows of Y_pcoum column
+head(Y_pcoum, 50)
+```
+
+
+```{r}
+# Display the first few rows of Y dataset
+head(Y)
+```
+
+
+```{r}
+#proChaine étape : le prétraitement des spectres
+
+
+# Create a vector for wavelength values
+wl <- seq(0, 727, 1)
+
+# Plot the transposed data matrix
+matplot(X, type = "l", xlab = "Wavelength", ylab = "Spectral Value", 
+        col = 1:ncol(X), lty = 1)
+```
+
+
+```{r}
+dim(Y)
+```
+
+
+```{r}
+dim(X)
+```
+
+
+```{r}
+# Define the SNV normalization function
+snv <- function(input_data) {
+  output_data <- matrix(0, nrow = nrow(input_data), ncol = ncol(input_data))
+  
+  for (i in 1:nrow(input_data)) {
+    output_data[i,] <- (input_data[i,] - mean(input_data[i,])) / sd(input_data[i,])
+  }
+  
+  return(output_data)
+}
+
+# Convert X to a matrix
+X <- as.matrix(X)
+
+# Apply SNV normalization
+Xsnv <- snv(X)
+
+# Plot the normalized spectral values
+matplot(t(Xsnv), type = "l", xlab = "Wavelength", ylab = "Normalized Spectral Value", 
+        col = 1:ncol(Xsnv), lty = 1)
+
+```
+```{r}
+dim(Xsnv)
+```
+
+
+```{r}
+# Load the required library
+install.packages("signal") 
+library(signal)
+
+# Define Savitzky-Golay parameters
+window_size <- 17
+poly_order <- 2
+
+# Transpose the matrix to work on columns
+X_transposed <- t(X)
+
+# Apply the Savitzky-Golay filter for second derivative to columns
+X2_transposed <- apply(X_transposed, 2, function(col) {
+  deriv_filter <- sgolayfilt(c(rep(0, 8), -2, rep(0, 8)), p = 2, n = 17)
+  filtered_col <- convolve(col, deriv_filter, type = "filter")
+  return(filtered_col)
+})
+
+# Transpose the result back to the original orientation
+X2 <- t(X2_transposed)
+
+# Plot the second derivative values
+matplot(t(X2), type = "l", xlab = "Wavelength", ylab = "Second Derivative Value", 
+        col = 1:ncol(X2), lty = 1)
+```
+```{r}
+dim(X2)
+```
+
+
+```{r}
+# Apply the Savitzky-Golay filter for second derivative
+X2snv <- snv(X2)
+```
+
+
+```{r}
+dim(X2snv)
+```
+
+
+```{r}
+#tentons une PLS
+library(pls)
+
+
+# Initialize empty vectors to store results
+R2_cal <- numeric()
+R2_cv <- numeric()
+RMSE_cal <- numeric()
+RMSE_cv <- numeric()
+Var_cal <- numeric()
+
+Components <- 1:20
+
+# Combine the predictor variables and the response variable into a single data frame
+data_df <- data.frame(Y_pcoum = unlist(Y_pcoum), Xsnv)
+
+
+# Calibration
+PLS_pcoum <- plsr(Y_pcoum ~ ., ncomp = 7, data = data_df)
+Ypred <- predict(PLS_pcoum, newdata = data_df)
+  
+# Extract the appropriate dimension of Ypred
+Ypred_flat <- Ypred[, 1, ]
+  
+#reprenons nos calculs
+R2 <- cor(Ypred_flat, data_df$Y_pcoum)^2
+RMSE <- sqrt(mean((Ypred_flat - data_df$Y_pcoum)^2))
+ 
+#résultats 
+cat("Results for 7 components\n")
+cat("R2:", R2, "\n")
+cat("RMSE:", RMSE, "\n\n")
+
+
+# Cross-validation
+Y_cv <- predict(PLS_pcoum, newdata = data.frame(Xsnv), validation = "CV")
+
+# Extract the appropriate dimension of Ypred
+Y_cv_flat <- Y_cv[, 1, ]
+  
+# Calculate scores
+R2_cv2 <- cor(Y_cv_flat, data_df$Y_pcoum)^2
+RMSE_cv <- sqrt(mean((Y_cv_flat - data_df$Y_pcoum)^2))
+  
+# Print the results
+cat("Results for 7 components\n")
+cat("R2_cv2:", R2_cv2, "\n")
+cat("RMSE_cv:", RMSE_cv, "\n\n")
+```
+
+
+```{r}
+
+#tentons une autre approche pour la cross validation : 10 segments.
+
+# Calibration
+PLS_pcoum <- plsr(Y_pcoum ~ ., ncomp = 7, data = data_df)
+Ypred <- predict(PLS_pcoum, newdata = data_df)
+
+# Extract the appropriate dimension of Ypred
+Ypred_flat <- Ypred[, 1, ]
+
+# Perform manual cross-validation
+set.seed(123)  # For reproducibility
+num_samples <- nrow(data_df)
+num_folds <- 10
+fold_size <- num_samples / num_folds
+
+# Initialize vectors to store cross-validation results
+R2_cv <- numeric()
+RMSE_cv <- numeric()
+
+for (fold in 1:num_folds) {
+  # Divide data into training and validation sets
+  val_start <- ((fold - 1) * fold_size) + 1
+  val_end <- fold * fold_size
+  val_indices <- val_start:val_end
+  train_indices <- setdiff(1:num_samples, val_indices)
+  
+  # Fit PLS model on training data
+  PLS_pcoum_fold <- plsr(Y_pcoum ~ ., ncomp = 7, data = data_df[train_indices, ])
+  
+  # Predict on validation data
+  Y_cv_fold <- predict(PLS_pcoum_fold, newdata = data_df[val_indices, ])
+  
+  # Extract the appropriate dimension of Y_cv_fold
+  Y_cv_flat <- Y_cv_fold[, 1, ]
+  
+  # Calculate scores for this fold
+  R2_cv_fold <- cor(Y_cv_flat, data_df$Y_pcoum[val_indices])^2
+  RMSE_cv_fold <- sqrt(mean((Y_cv_flat - data_df$Y_pcoum[val_indices])^2))
+  
+  # Store the results for this fold
+  R2_cv <- c(R2_cv, R2_cv_fold)
+  RMSE_cv <- c(RMSE_cv, RMSE_cv_fold)
+}
+
+
+# Calculate average R2 for cross-validation
+average_R2_cv <- mean(R2_cv)
+
+# Calculate average RMSE for cross-validation
+average_RMSE_cv <- mean(RMSE_cv)
+
+# Print the cross-validation results
+cat("Cross-validation results:\n")
+cat("R2_cv:", average_R2_cv, "\n")
+cat("RMSE_cv:", average_RMSE_cv, "\n")
+```
+
+
+
+
+
+```{r}
+#j'arrete le script ici. Mon objectif est de monter que je peux traduire un script python en R.
+#Le reste du script étant de la PLS sur d'autres paramètres et avec les spectres dérivés, c'est assez répétitif.
+#
